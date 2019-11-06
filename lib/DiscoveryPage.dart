@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 
 import './BluetoothDeviceListEntry.dart';
+import './WaterfallPage.dart';
 
 class DiscoveryPage extends StatefulWidget {
   /// If true, discovery starts on page start, otherwise user must press action button.
@@ -14,10 +16,26 @@ class DiscoveryPage extends StatefulWidget {
   _DiscoveryPage createState() => new _DiscoveryPage();
 }
 
+enum _DeviceAvailability {
+  no,
+  maybe,
+  yes,
+}
+
+class _DeviceWithAvailability extends BluetoothDevice {
+  BluetoothDevice device;
+  _DeviceAvailability availability;
+  int rssi;
+
+  _DeviceWithAvailability(this.device, this.availability, [this.rssi]);
+}
+
 class _DiscoveryPage extends State<DiscoveryPage> {
   StreamSubscription<BluetoothDiscoveryResult> _streamSubscription;
   List<BluetoothDiscoveryResult> results = List<BluetoothDiscoveryResult>();
+  // List<BluetoothDevice> bonded = List<BluetoothDevice>();
   bool isDiscovering;
+  bool isConnecting = true;
 
   _DiscoveryPage();
 
@@ -29,6 +47,12 @@ class _DiscoveryPage extends State<DiscoveryPage> {
     if (isDiscovering) {
       _startDiscovery();
     }
+
+    // FlutterBluetoothSerial.instance.getBondedDevices().then((List<BluetoothDevice> bondedDevices) {
+    //   setState(() {
+    //     bonded = bondedDevices;
+    //   });
+    // });
   }
 
   void _restartDiscovery() {
@@ -54,8 +78,6 @@ class _DiscoveryPage extends State<DiscoveryPage> {
       });
     });
   }
-
-  // @TODO . One day there should be `_pairDevice` on long tap on something... ;)
 
   @override
   void dispose() {
@@ -166,8 +188,55 @@ class _DiscoveryPage extends State<DiscoveryPage> {
                 return BluetoothDeviceListEntry(
                     device: result.device,
                     rssi: result.rssi,
-                    onTap: () {
-                      Navigator.of(context).pop(result.device);
+                    onTap: () async {
+                      try {
+                        // // REMOVE THIS (JUST MOCK BEFORE TESTING WITH THE REAL BLUETOOTH MODULE)
+                        // Navigator.of(context).push(MaterialPageRoute(builder: (context) {
+                        //   return WaterfallPage();
+                        // }));
+                        // //======================================================================
+                        bool bonded = false;
+                        if (!result.device.isBonded) {
+                          print('Bonding with ${result.device.address}...');
+                          bonded = await FlutterBluetoothSerial.instance
+                            .bondDeviceAtAddress(result.device.address);
+                          print('Bonding with ${result.device.address} has ${bonded ? 'succed' : 'failed'}.');
+                          
+                        } else {
+                          bonded = true;
+                        }
+                        if(bonded) {
+                          await BluetoothConnection.toAddress(result.device.address).then((_connection) {
+                            print('Connected to the device');
+                            var map = {'device': result.device, 'connection': _connection};
+                            setState(() {
+                              isConnecting = false;
+                            });
+                            Navigator.of(context).pop(map);
+                          }).catchError((error) {
+                            print('Cannot connect, exception occured');
+                            print(error);
+                          });
+                        }
+                      } catch (ex) {
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('Error occured while bonding'),
+                              content: Text("${ex.toString()}"),
+                              actions: <Widget>[
+                                new FlatButton(
+                                  child: new Text("Close"),
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      }
                     },
                     onLongPress: () async {
                       try {

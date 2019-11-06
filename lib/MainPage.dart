@@ -8,6 +8,7 @@ import './SelectBondedDevicePage.dart';
 import './ChatPage.dart';
 import './BackgroundCollectingTask.dart';
 import './BackgroundCollectedPage.dart';
+import './WaterfallPage.dart';
 
 //import './LineChart.dart';
 
@@ -31,9 +32,16 @@ class _MainPage extends State<MainPage> {
 
   bool _autoAcceptPairingRequests = false;
 
+  BluetoothDevice _device;
+  BluetoothConnection _connection;
+
   @override
   void initState() {
     super.initState();
+
+    if(_device != null && _device.isConnected) {
+        _startWaterfall(context, _device, _connection);
+    }
 
     // Get current state
     FlutterBluetoothSerial.instance.state.then((state) {
@@ -100,24 +108,24 @@ class _MainPage extends State<MainPage> {
                 child: InkWell(
                   splashColor: Colors.black38,
                   child: SizedBox(width: 56, height: 56, child: Icon(Icons.bluetooth_searching)),
-                  onTap: () {
-                    future() async { // async lambda seems to not working
+                  onTap: () async { // async lambda seems to not working
                       if (_bluetoothState == BluetoothState.STATE_OFF)
                         await FlutterBluetoothSerial.instance.requestEnable();
                         
-                      final BluetoothDevice selectedDevice = await Navigator.of(context).push(
+                      final deviceConnection = await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) { return DiscoveryPage(); })
                       );
-                      if (selectedDevice != null) {
-                        print('Discovery -> selected ' + selectedDevice.address);
+                      setState(() {
+                       _device = deviceConnection['device'] as BluetoothDevice;
+                       _connection = deviceConnection['connection'] as BluetoothConnection;
+                      });
+                      if (deviceConnection != null) {
+                        print('Discovery -> selected ' + deviceConnection['device'].address);
+                        _startWaterfall(context, _device, _connection);
                       }
                       else {
                         print('Discovery -> no device selected');
                       }
-                    }
-                    future().then((_) {
-                      setState(() {});
-                    });
                   },
                 )
               )
@@ -127,9 +135,10 @@ class _MainPage extends State<MainPage> {
     );
   }
 
-  void _startChat(BuildContext context, BluetoothDevice server) {
+  void _startWaterfall(BuildContext context, BluetoothDevice device, BluetoothConnection connection) {
     Navigator.of(context).push(MaterialPageRoute(builder: (context) {
-      return ChatPage(server: server);
+      return WaterfallPage(device: device, connection: connection);
+      // return WaterfallPage();
     }));
   }
 

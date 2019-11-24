@@ -24,7 +24,7 @@ class _WaterfallPage extends State<WaterfallPage> {
 
   double _speed = 0.0;
 
-  String _messageBuffer = '';
+  String _messageBuffer = '0';
 
   bool isOn = true;
   bool isConnecting = true;
@@ -189,7 +189,9 @@ class _WaterfallPage extends State<WaterfallPage> {
                         border: Border.all(color: Colors.white, width: 5),
                         borderRadius: BorderRadius.circular(10)
                       ),
-                      child: Image.asset('assets/images/waves.png'),
+                      child: (_messageBuffer == '1') ? 
+                        Image.asset('assets/images/waves.png') :
+                        Image.asset('assets/images/waves_low.png'),
                     ),
                     Text(
                       "low",
@@ -294,6 +296,7 @@ class _WaterfallPage extends State<WaterfallPage> {
         + dataString
       );
     }
+    print(_messageBuffer);
   }
 
   void _sendMessage(String text) async {

@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#define DEBUG 1
+#include <Arduino_FreeRTOS.h>
+#include <semphr.h>
 
 #include <SoftwareSerial.h>
 
@@ -13,14 +14,124 @@ int speed = 0;
 
 bool speedAlready = true;
 
-void loop(void)
+int IN1 = 10;
+int IN2 = 11;
+
+int sensorBaixo = 2;
+int sensorAlto = 3;
+
+SemaphoreHandle_t ligaBombaSemaforo;
+SemaphoreHandle_t desligaBombaSemaforo;
+
+void setup(void)
 {
-  delay(1);
-  while (bluetooth.available()) {
-    int msg = bluetooth.read();
-    if(msg >= 32 && msg <= 126) {
-      Serial.println(msg);
-      switch (msg) {
+  Serial.begin(9600);
+
+  bluetooth.begin(9600);
+
+  pinMode(13, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(sensorBaixo, INPUT);
+  pinMode(sensorAlto, INPUT);
+
+  digitalWrite(13, LOW);
+
+  xTaskCreate(TaskAgua,
+              "Agua",
+              128,
+              NULL,
+              1,
+              NULL);
+
+  xTaskCreate(TaskBluetooth,
+              "Bluetooth",
+              128,
+              NULL,
+              0,
+              NULL);
+
+  ligaBombaSemaforo = xSemaphoreCreateBinary();
+  desligaBombaSemaforo = xSemaphoreCreateBinary();
+  xSemaphoreGive(ligaBombaSemaforo);
+
+  //Interrupções para leitura dos sensores de nível
+  if (ligaBombaSemaforo != NULL)
+  {
+    attachInterrupt(digitalPinToInterrupt(sensorBaixo), ligaBombaHandler, FALLING); //Falling: HIGH -> LOW
+  }
+
+  if (desligaBombaSemaforo != NULL)
+  {
+    attachInterrupt(digitalPinToInterrupt(sensorAlto), desligaBombaHandler, RISING); //Rising: LOW -> HIGH
+  }
+}
+
+//=============== Rotinas para tratar as interrupções ================
+void ligaBombaHandler()
+{
+  Serial.println("LIGA");
+  xSemaphoreGiveFromISR(ligaBombaSemaforo, NULL);
+}
+
+void desligaBombaHandler()
+{
+  Serial.println("Desliga");
+  xSemaphoreGiveFromISR(desligaBombaSemaforo, NULL);
+}
+//====================================================================
+
+//================ Funções para controle da ponte h ==================
+void ligaBomba() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+}
+
+void desligaBomba() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, HIGH);
+}
+//====================================================================
+
+void TaskAgua(void *pvParameters)
+{
+  (void)pvParameters;
+
+  for (;;)
+  {
+    //Com o reservatório vazio, pega o semáforo para ligar a bomba e enviar a informação para o app
+    if (xSemaphoreTake(ligaBombaSemaforo, portMAX_DELAY) == pdPASS)
+    {
+      Serial.println("LOW");
+      ligaBomba();
+      bluetooth.write(static_cast<byte>(static_cast<int>(0)));
+    }
+
+    //Com o reservatório cheio (após a interrupção) pega o semáforo para desligar a bomba e enviar a informação para o app
+    if (xSemaphoreTake(desligaBombaSemaforo, portMAX_DELAY) == pdPASS)
+    {
+      Serial.println("HIGH");
+      desligaBomba();
+      bluetooth.write(static_cast<byte>(static_cast<int>(1)));
+    }
+  }
+}
+
+//Task para receber informações da aplicação mobile
+void TaskBluetooth(void *pvParameters)
+{
+  (void)pvParameters;
+
+  for (;;)
+  {
+    while (bluetooth.available())
+    {
+      int msg = bluetooth.read();
+      if (msg >= 32 && msg <= 126)
+      {
+        Serial.println(msg);
+        switch (msg)
+        {
         //ON
         case 'a':
           doUpdateStatus = true;
@@ -32,26 +143,12 @@ void loop(void)
           digitalWrite(13, LOW);
           break;
         //CHANGE SPEED
-        // case 's':
-        //   char mensagem[3];
-        //   int cont = 0;
-        //   while (bluetooth.available())
-        //   {
-        //     int byte = bluetooth.read();
-        //     if(byte >= 48 && byte <= 57) {
-        //       mensagem[cont] = byte;
-        //       cont++;
-        //     }
-        //   }
-        //   speed = atoi(mensagem);
-        //   Serial.print("speed: ");
-        //   Serial.println(speed);
-        //   doUpdateStatus = false;
-        //   break;
-        default :
-          if(!speedAlready) {
-            if(msg >= 48 && msg <= 57) {
-              speed = msg-'0';
+        default:
+          if (!speedAlready)
+          {
+            if (msg >= 48 && msg <= 57)
+            {
+              speed = msg - '0';
             }
             speedAlready = true;
             Serial.print("speed: ");
@@ -59,37 +156,13 @@ void loop(void)
             doUpdateStatus = false;
             break;
           }
+        }
       }
     }
+    speedAlready = false;
   }
-
-  speedAlready = false;
-  
-  // static unsigned long lastRefreshTime = 0;
-  // if (millis() - lastRefreshTime >= 1000) {
-  //   lastRefreshTime += 1000;
-    
-  //   if (doUpdateStatus) {
-      
-  //     bluetooth.write('t');
-  //     for (byte i = 0; i < 2; i++) {
-  //       bluetooth.write(static_cast<byte>(static_cast<int>(DS18B20_value[i])));
-  //       bluetooth.write(static_cast<byte>(static_cast<int>((DS18B20_value[i] - static_cast<int>(DS18B20_value[i])) * 100)));
-  //     }
-      
-  //     bluetooth.write('w');
-  //     bluetooth.write(static_cast<byte>(static_cast<int>(phSensors[0].value)));
-  //     bluetooth.write(static_cast<byte>(static_cast<int>((phSensors[0].value - static_cast<int>(phSensors[0].value)) * 100)));
-  //   }
-  // }
 }
 
-void setup(void)
+void loop()
 {
-  Serial.begin(9600);
-  
-  bluetooth.begin(9600);
-  
-  pinMode(13, OUTPUT);
-  digitalWrite(13, LOW);
 }

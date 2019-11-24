@@ -1,0 +1,94 @@
+\documentclass[12pt,a4paper]{article}
+\author{}
+
+\usepackage[brazil]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{indentfirst}
+\title{Waterfall}
+
+\begin{document}
+\maketitle
+\vfill
+\begin{center}
+Gabriela Frizoni Carneiro - 
+\\
+Alexandre Cabral Bedeschi - 201569001A
+\end{center}
+\newpage
+
+\section{Hardware e Software}
+
+\subsection{Hardware}
+\begin{itemize}
+    \item Arduino
+    \item Jumpers
+    \item Protoboard
+    \item Módulo Bluetooth HC-05
+    \item Mini bomba d'água
+    \item Ponte h
+    \item Sensores de nível de fluido
+    \item Fonte 12v
+\end{itemize}
+
+\subsection{Softwares}
+
+\begin{itemize}
+    \item Visual Studio Code + PlataformIO
+    \item Flutter SDK
+    \item FreeRTOS
+\end{itemize}
+
+\subsection{Links}
+Códigos: https://github.com/o-mago/waterfall
+
+App layout: https://www.figma.com/file/ed6Xty4baqywVBbnS5CsNm/Waterfall?node-id=0%3A2
+
+\newpage
+\section{Funcionamento}
+\subsection{Arduino}
+O reservatório de água em questão possui dois sensores de nível de fluido 
+(um para nível baixo e outro para nível alto). O arduino recebe informações 
+desses sensores nas suas portas digitais e trata esses sinais através de 
+interrupções.
+
+Supondo o reservatório vazio inicialmente, o sensor de "nível baixo" estará 
+com valor LOW, o arduino ativará
+a bomba através da task "TaskAgua". A bomba funcionará até o momento em que 
+o sensor de "nível alto" for acionado, quando isso ocorrer, a bomba cessará 
+seu funcionamento.
+
+Nesse meio tempo, outra task estará em execução ("TaskBluetooth"). Ela é 
+responsável pela comunicação Aplicação Mobile -> Arduino. Assim que alguma 
+mensagem for recebida pelo módulo e alocada em um buffer no arduino, a mensagem
+será lida e são quatro as instruções possíveis:
+\begin{itemize}
+\item Ligar o sistema
+\item Desligar o sistema (desliga a bomba e trava a "TaskAgua")
+\item Aumentar a potência da bomba (controle de tensão pela ponte h)
+\item Diminuir a potência da bomba (controle de tensão pela ponte h)
+\end{itemize}
+
+A comunicação Arduino -> Aplicação Mobile é feita no momento das interrupções, 
+enviando a informação referente ao nível da água para gerar a visibilidade no mesmo
+
+\subsection{Aplicação Mobile}
+A aplicação apresenta 4 telas:
+\begin{enumerate}
+    \item Tela inicial com logo
+    \item Apresenta um botão para ligar o bluetooth e iniciar a procura de dispositivos
+    \item Mostra os dispositivos bluetooth próximos (indicando a potência do sinal em dB), permitindo parear e conectar
+    \item Tela principal. Mostra o nível do fluido, permite ligar e desligar o sistema de controle de nível de água, controlar a potência da bomba e desconectar do dispositivo
+\end{enumerate}
+
+\newpage
+\section{Arduino}
+\subsection{Esquemático}
+\subsection{O sistema montado}
+
+\section{Aplicação Mobile}
+\subsection{SplashScreen}
+\subsection{Liga o bluetooth (caso desligado)}
+\subsection{Seleciona o dispositivo a se conectar}
+\subsection{Tela principal}
+\end{document}

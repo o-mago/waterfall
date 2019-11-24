@@ -1,9 +1,9 @@
 name: Waterfall
 version: 0.0.1
-description: Demonstrates how to use the `flutter_bluetooth_serial` plugin.
+description: Fluid control mobile application
 authors: 
 - Alexandre Cabral Bedeschi
-homepage: https://github.com/edufolly/flutter_bluetooth_serial/tree/master/example/
+homepage: https://github.com/o-mago/waterfall
 
 dependencies:
   flutter:

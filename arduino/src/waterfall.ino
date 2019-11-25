@@ -8,9 +8,9 @@
 
 SoftwareSerial bluetooth(7, 8);
 
-bool doUpdateStatus = false;
+bool on = true;
 
-int speed = 0;
+int speed = 255;
 
 bool speedAlready = true;
 
@@ -37,8 +37,15 @@ void setup(void)
 
   digitalWrite(13, LOW);
 
-  xTaskCreate(TaskAgua,
-              "Agua",
+  xTaskCreate(TaskLigaBomba,
+              "Liga Bomba",
+              128,
+              NULL,
+              1,
+              NULL);
+
+  xTaskCreate(TaskDesligaBomba,
+              "Desliga Bomba",
               128,
               NULL,
               1,
@@ -83,7 +90,7 @@ void desligaBombaHandler()
 
 //================ Funções para controle da ponte h ==================
 void ligaBomba() {
-  digitalWrite(IN1, HIGH);
+  digitalWrite(IN1, speed);
   digitalWrite(IN2, LOW);
 }
 
@@ -93,26 +100,34 @@ void desligaBomba() {
 }
 //====================================================================
 
-void TaskAgua(void *pvParameters)
+void TaskLigaBomba(void *pvParameters)
 {
   (void)pvParameters;
 
   for (;;)
   {
     //Com o reservatório vazio, pega o semáforo para ligar a bomba e enviar a informação para o app
-    if (xSemaphoreTake(ligaBombaSemaforo, portMAX_DELAY) == pdPASS)
+    if ((xSemaphoreTake(ligaBombaSemaforo, portMAX_DELAY) == pdPASS) && on)
     {
       Serial.println("LOW");
       ligaBomba();
-      bluetooth.write(static_cast<byte>(static_cast<int>(0)));
+      bluetooth.write(static_cast<byte>(0));
     }
+  }
+}
 
+void TaskDesligaBomba(void *pvParameters) {
+  
+  (void)pvParameters;
+
+  for (;;)
+  {
     //Com o reservatório cheio (após a interrupção) pega o semáforo para desligar a bomba e enviar a informação para o app
     if (xSemaphoreTake(desligaBombaSemaforo, portMAX_DELAY) == pdPASS)
     {
       Serial.println("HIGH");
       desligaBomba();
-      bluetooth.write(static_cast<byte>(static_cast<int>(1)));
+      bluetooth.write(static_cast<byte>(1));
     }
   }
 }
@@ -134,26 +149,26 @@ void TaskBluetooth(void *pvParameters)
         {
         //ON
         case 'a':
-          doUpdateStatus = true;
-          digitalWrite(13, HIGH);
+          on = true;
           break;
         //OFF
         case 'b':
-          doUpdateStatus = false;
-          digitalWrite(13, LOW);
+          on = false;
+          xSemaphoreGive(desligaBombaSemaforo);
           break;
         //CHANGE SPEED
         default:
           if (!speedAlready)
           {
+            int speedReceived = 0;
             if (msg >= 48 && msg <= 57)
             {
-              speed = msg - '0';
+              speedReceived = msg - '0';
             }
             speedAlready = true;
+            speed = map(speedReceived, 0, 5, 0, 255);
             Serial.print("speed: ");
             Serial.println(speed);
-            doUpdateStatus = false;
             break;
           }
         }

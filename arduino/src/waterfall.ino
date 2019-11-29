@@ -6,7 +6,7 @@
 
 #include <SoftwareSerial.h>
 
-SoftwareSerial bluetooth(7, 8);
+SoftwareSerial bluetooth(7, 8); //(rx, tx)
 
 bool on = true;
 

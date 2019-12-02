@@ -6,37 +6,51 @@
 
 #include <SoftwareSerial.h>
 
+//Pinos para comunicação Arduino - Bluetooth
 SoftwareSerial bluetooth(7, 8); //(rx, tx)
 
+//Variável que indica se o app enviou o comando para parar o sistema
 bool on = true;
 
+//Potência da bomba
 int speed = 255;
 
+//Variável para evitar dados extras vindos pela comunicação bluetooth
 bool speedAlready = true;
 
+//Pinos PWM da ponte h
 int IN1 = 10;
 int IN2 = 11;
 
+//Pino sensor nível baixo de fluido
 int sensorBaixo = 2;
+
+//Pino sensor nível alto de fluido
 int sensorAlto = 3;
 
+//Semaforo binário para ligar a bomba
 SemaphoreHandle_t ligaBombaSemaforo;
+
+//Semaforo binário para desligar a bomba
 SemaphoreHandle_t desligaBombaSemaforo;
 
 void setup(void)
 {
+  //Serial para debug
   Serial.begin(9600);
 
+  //Inicia comunicação com módulo Bluetooth
   bluetooth.begin(9600);
-
-  pinMode(13, OUTPUT);
+  
+  //Pinos ponte h como output
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
+
+  //Pinos sensores como input
   pinMode(sensorBaixo, INPUT);
   pinMode(sensorAlto, INPUT);
 
-  digitalWrite(13, LOW);
-
+  //Cria as tasks
   xTaskCreate(TaskLigaBomba,
               "Liga Bomba",
               128,
@@ -58,47 +72,62 @@ void setup(void)
               0,
               NULL);
 
+  //Inicializa os semaforos como binários
   ligaBombaSemaforo = xSemaphoreCreateBinary();
   desligaBombaSemaforo = xSemaphoreCreateBinary();
-  xSemaphoreGive(ligaBombaSemaforo);
+
+  //Verifica o nível inicial do fluido
+  verificaEstadoAtual();
 
   //Interrupções para leitura dos sensores de nível
   if (ligaBombaSemaforo != NULL)
   {
-    attachInterrupt(digitalPinToInterrupt(sensorBaixo), ligaBombaHandler, FALLING); //Falling: HIGH -> LOW
+    attachInterrupt(digitalPinToInterrupt(sensorBaixo), ligaBombaHandler, RISING); //Rising: LOW -> HIGH
   }
 
   if (desligaBombaSemaforo != NULL)
   {
-    attachInterrupt(digitalPinToInterrupt(sensorAlto), desligaBombaHandler, RISING); //Rising: LOW -> HIGH
+    attachInterrupt(digitalPinToInterrupt(sensorAlto), desligaBombaHandler, FALLING); //Falling: HIGH -> LOW
   }
 }
 
 //=============== Rotinas para tratar as interrupções ================
 void ligaBombaHandler()
 {
-  Serial.println("LIGA");
   xSemaphoreGiveFromISR(ligaBombaSemaforo, NULL);
 }
 
 void desligaBombaHandler()
 {
-  Serial.println("Desliga");
   xSemaphoreGiveFromISR(desligaBombaSemaforo, NULL);
 }
 //====================================================================
 
 //================ Funções para controle da ponte h ==================
 void ligaBomba() {
+  Serial.println("Ligada");
   digitalWrite(IN1, speed);
-  digitalWrite(IN2, LOW);
+  digitalWrite(IN2, 0);
 }
 
 void desligaBomba() {
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, HIGH);
+  Serial.println("Desligada");
+  digitalWrite(IN1, 255);
+  digitalWrite(IN2, 255);
 }
 //====================================================================
+
+void verificaEstadoAtual() {
+  if(!digitalRead(sensorAlto)) {
+    Serial.println("ALTO");
+    xSemaphoreGive(desligaBombaSemaforo);
+    bluetooth.write(static_cast<byte>(1));
+  } else {
+    Serial.println("BAIXO");
+    xSemaphoreGive(ligaBombaSemaforo);
+    bluetooth.write(static_cast<byte>(0));
+  }
+}
 
 void TaskLigaBomba(void *pvParameters)
 {
@@ -107,12 +136,10 @@ void TaskLigaBomba(void *pvParameters)
   for (;;)
   {
     //Com o reservatório vazio, pega o semáforo para ligar a bomba e enviar a informação para o app
-    if ((xSemaphoreTake(ligaBombaSemaforo, portMAX_DELAY) == pdPASS) && on)
-    {
-      Serial.println("LOW");
-      ligaBomba();
-      bluetooth.write(static_cast<byte>(0));
-    }
+    xSemaphoreTake(ligaBombaSemaforo, portMAX_DELAY);
+    Serial.println("Liga Bomba");
+    ligaBomba();
+    bluetooth.write(static_cast<byte>(0));
   }
 }
 
@@ -123,10 +150,11 @@ void TaskDesligaBomba(void *pvParameters) {
   for (;;)
   {
     //Com o reservatório cheio (após a interrupção) pega o semáforo para desligar a bomba e enviar a informação para o app
-    if (xSemaphoreTake(desligaBombaSemaforo, portMAX_DELAY) == pdPASS)
-    {
-      Serial.println("HIGH");
-      desligaBomba();
+    xSemaphoreTake(desligaBombaSemaforo, portMAX_DELAY);
+    Serial.println("Desliga Bomba");
+    desligaBomba();
+    //Só muda o nível de fluido no app se o sistema estiver ligado (evita mudar se clicar em desligar o sistema)
+    if(on) {
       bluetooth.write(static_cast<byte>(1));
     }
   }
@@ -150,13 +178,14 @@ void TaskBluetooth(void *pvParameters)
         //ON
         case 'a':
           on = true;
+          verificaEstadoAtual();
           break;
         //OFF
         case 'b':
           on = false;
           xSemaphoreGive(desligaBombaSemaforo);
           break;
-        //CHANGE SPEED
+        //Muda SPEED
         default:
           if (!speedAlready)
           {
@@ -167,6 +196,7 @@ void TaskBluetooth(void *pvParameters)
             }
             speedAlready = true;
             speed = map(speedReceived, 0, 5, 0, 255);
+            verificaEstadoAtual();
             Serial.print("speed: ");
             Serial.println(speed);
             break;

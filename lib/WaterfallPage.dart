@@ -22,7 +22,7 @@ class _WaterfallPage extends State<WaterfallPage> {
   static final clientID = 0;
   static final maxMessageLength = 4096 - 3;
 
-  double _speed = 0.0;
+  double _speed = 5.0;
 
   String _messageBuffer = '0';
 
